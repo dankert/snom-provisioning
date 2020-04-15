@@ -1,0 +1,32 @@
+# Configuration of your infrastructure and your SIP phones.
+system:
+  proxy: "192.168.0.1" # This should be the IP of your router
+  language: "Deutsch"
+  timezone: "GER+1"
+  ip: ""
+  dhcp: true
+  gateway: 192.168.0.1
+  netmask: 255.255.255.0
+  domain: "domain"
+  admin:
+    user: root
+    password: yourpassword
+# Accounts
+# not implemented yet :(
+accounts:
+  - name: alice
+    label: Alice
+    user: sip8765
+    password: gfs3w45uhg
+# Your devices
+devices:
+  - type: snom821
+    host: hostnameofphone
+    ip: 192.168.0.101
+    dhcp: false
+    mac: 00:03:1E:4A:3F:BF
+    users:
+      - alice
+phonebook:
+  # The phonebook should be a export file from contacts.google.com
+  file: phonebook.csv
