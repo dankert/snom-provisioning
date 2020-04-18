@@ -14,10 +14,12 @@ system:
 # Accounts
 # not implemented yet :(
 accounts:
-  - name: alice
+  alice:
     label: Alice
     user: sip8765
     password: gfs3w45uhg
+  bob:
+    password: o985u4tioe
 # Your devices
 devices:
   - type: snom821

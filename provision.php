@@ -1,6 +1,7 @@
 <?php
+//error_reporting(E_ALL);
 
-
+// Initialization
 require_once ('lib/Spyc.php');
 
 $DEVICES_YML = 'devices-'.$_SERVER['HTTP_HOST'].'.yml';
@@ -16,62 +17,130 @@ if   ( ! is_file($contactsCSV))
     throw new RuntimeException('file does not exist: '.$contactsCSV);
 
 $handle = fopen($contactsCSV, "r");
-$csv = [];
-while (($csv[] = fgetcsv($handle)) !== FALSE) {
+$contacts = [];
+while (($contacts[] = fgetcsv($handle)) !== FALSE) {
 }
 
-$keys = array_shift($csv);
-foreach ($csv as $i=>$row) {
-    $csv[$i] = array_combine($keys, $row);
+$keys = array_shift($contacts);
+foreach ($contacts as $i=> $row) {
+    $contacts[$i] = @array_combine($keys, $row);
 }
+
+$actual_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[SCRIPT_NAME]";
 
 
 
 if   ( $_GET['action']=='settings')
 {
+    // Step 1: Create Phone settings
     header('Content-Type: text/xml');
-?><settings>
-    <?php foreach( $devices['devices'] as $device ) {
+
+    $doc = new DOMDocument('1.0','UTF-8');
+    $settings = $doc->createElement('settings');
+    $doc->appendChild($settings);
+
+    // Phone settings
+    foreach( $devices['devices'] as $device ) {
         if   (str_replace(':','',@$device['mac'])==$_GET['mac']) {
-            $actual_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[SCRIPT_NAME]".'?action=settings&amp;mac={mac}'
-            ?>
-            <phone-settings e="2">
-                <language perm=""><?php echo $devices['system']['language']; ?></language>
-                <setting_server perm="RW"><?php echo $actual_link ?></setting_server>
-                <ip_adr perm="R"><?php echo $device['ip']; ?></ip_adr>
-                <netmask perm="R"><?php echo $devices['system']['netmask']; ?></netmask>
-                <dns_domain perm="RW"><?php echo $devices['system']['domain']; ?></dns_domain>
-                <dns_server1 perm="RW"><?php echo $devices['system']['gateway']; ?></dns_server1>
-                <dhcp perm="">off</dhcp>
-                <gateway perm="R"><?php echo $devices['system']['gateway']; ?></gateway>
-                <phone_name perm="R"><?php echo $device['host']; ?></phone_name>
-                <?php ?></phone-settings>
-            <?php
+
+
+            $phoneSettings = [
+                'language'      => $devices['system']['language'],
+                'setting_server'=> $actual_link.'?action=settings&amp;mac={mac}',
+                'settings_refresh_timer'=> '1800',
+                'update_policy' => 'settings_only',
+                'ip_adr'        => $device['ip'],
+                'netmask'       => $devices['system']['netmask'],
+                'dns_domain'    => $devices['system']['domain'],
+                'dns_server1'   => $devices['system']['gateway'],
+                'dhcp'          => 'off',
+                'gateway'       => $devices['system']['gateway'],
+                'phone_name'    => $device['host'],
+                'http_user'     => $devices['system']['admin']['user'],
+                'http_pass'     => $devices['system']['admin']['password']
+            ];
+            if   ( @$devices['system']['ntp'] )
+                $phoneSettings['ntp_server'] = $devices['system']['ntp'];
+
+            $phonesettings = new DOMElement('phone-settings');
+            $settings->appendChild( $phonesettings );
+            $phonesettings->setAttribute('e','2');
+
+            foreach( $phoneSettings as $name=>$value )
+            {
+                $e = new DOMElement($name,$value);
+                $phonesettings->appendChild($e);
+                $e->setAttribute('perm','RW');
+            }
+
+            $userIndex = 1;
+            foreach( $device['users'] as $username )
+            {
+                $user = @$devices['accounts'][$username];
+                if   ( !$user )
+                    $user = [];
+                //$user = array_merge($devices['system'],$user);
+
+                $userSettings = [
+                    'active'=>'on',
+                    'realname'=>@$user['label']?$user['label']:$username,
+                    'pass'=>@$user['password']?$user['password']:@$devices['system']['proxy'],
+                    'name'=>@$user['user']?$user['user']:$username,
+                    'host'=>@$user['proxy']?$user['proxy']:@$devices['system']['proxy']
+                ];
+
+                foreach( $userSettings as $name=>$value )
+                {
+                    $u = new DOMElement('user_'.$name,$value);
+                    $phonesettings->appendChild($u);
+                    $u->setAttribute('perm','RW');
+                    $u->setAttribute('idx',$userIndex);
+                }
+                $userIndex++;
+            }
         }
-    }?>
-    <tbook e="2">
-        <?php
-        $idx=0;
-        foreach($csv as $entry) {
-            if   ( !@$entry['Phone 1 - Value']) continue; // Must have a telephone number
-          ?><item context="" type="" fav="false" mod="true" index="<?php echo $idx++ ?>">
-                <name><?php echo $entry['Name'] ?></name>
-                <first_name><?php echo $entry['Given Name'] ?></first_name>
-                <last_name><?php echo $entry['Family Name'] ?></last_name>
-                <number><?php echo $entry['Phone 1 - Value'] ?></number>
-                <!-- "/"sip"/"mobile"/"fixed"/"home"/"business""" -->
-                <!--<number_type>sip</number_type>-->
-                <email><?php echo $entry['E-mail 1 - Value'] ?></email>
-                <note><?php echo $entry['Address 1 - Formatted'] ?></note>
-                <?php if (@$entry['Birthday']) { ?>
-                <birthday><?php echo date("m/d/Y", strtotime($entry['Birthday'])); ?></birthday>
-                <organization><?php echo $entry['Organization 1 - Name']; ?></organization>
-                <?php } ?>
-            </item><?php
+    }
+
+
+    // Step 2: Phone book
+
+    $book = new DOMElement('tbook');
+    $settings->appendChild($book);
+    $book->setAttribute('e','2');
+    $settings->appendChild($book);
+    
+    $idx=1;
+    foreach($contacts as $contact) {
+        for( $p = 1; $p <= 6; $p++ ) {
+
+            if   ( !@$contact['Phone '.$p.' - Value']) continue; // Must have a telephone number
+
+            $item = new DOMElement('item');
+            $book->appendChild($item);
+            $item->setAttribute('context','');
+            $item->setAttribute('type','');
+            $item->setAttribute('fav','false');
+            $item->setAttribute('mod','true');
+            $item->setAttribute('index',$idx++);
+
+            $phone = [
+                'name'=>$contact['Name'],
+                'first_name'=>$contact['Given Name'],
+                'last_name'=>$contact['Family Name'],
+                'number'=>$contact['Phone '.$p.' - Value'],
+                // TODO: number_type "/sip/mobile/fixed/home/business"
+                'email'=>$contact['E-mail 1 - Value'],
+                'note'=>$contact['Address 1 - Formatted'],
+                'organization'=>$contact['Organization 1 - Name']
+            ];
+            if (@$contact['Birthday'])
+                $phone['birthday']=date("m/d/Y", strtotime($contact['Birthday']));
+
+            foreach( $phone as $name=>$value)
+                $item->appendChild( new DOMElement($name,$value) );
         }
-        ?>
-    </tbook>
-</settings><?php
+    }
+    echo $doc->saveXML();
 }
 
 
@@ -81,7 +150,7 @@ elseif   ( $_GET['action']=='debug')
     echo "\n\nDevice configuration:\n\n";
     print_r($devices);
     echo "\n\nPhonebook:\n\n";
-    print_r($csv);
+    print_r($contacts);
 }
 
 else {
