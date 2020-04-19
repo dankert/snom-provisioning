@@ -46,6 +46,7 @@ if   ( $_GET['action']=='settings')
 
             $phoneSettings = [
                 'language'      => $devices['system']['language'],
+                'web_language'  => $devices['system']['language'],
                 'setting_server'=> $actual_link.'?action=settings&amp;mac={mac}',
                 'settings_refresh_timer'=> '1800',
                 'update_policy' => 'settings_only',
@@ -57,8 +58,17 @@ if   ( $_GET['action']=='settings')
                 'gateway'       => $devices['system']['gateway'],
                 'phone_name'    => $device['host'],
                 'http_user'     => $devices['system']['admin']['user'],
-                'http_pass'     => $devices['system']['admin']['password']
+                'http_pass'     => $devices['system']['admin']['password'],
+                'admin_mode_password'         => $devices['system']['admin']['password'],
+                'admin_mode_password_confirm' => $devices['system']['admin']['password']
             ];
+            if   ( @$device['ip'] )
+            {
+                $phoneSettings['ip_adr'] = $device['ip'];
+                $phoneSettings['dhcp'  ] = 'off';
+            }else {
+                $phoneSettings['dhcp'  ] = 'on';
+            }
             if   ( @$devices['system']['ntp'] )
                 $phoneSettings['ntp_server'] = $devices['system']['ntp'];
 
